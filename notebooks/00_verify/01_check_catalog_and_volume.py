@@ -14,6 +14,26 @@
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Path setup
+# MAGIC
+# MAGIC Databricks Git folders don't put `src/` on the Python path automatically
+# MAGIC for a `src/nem/` layout — only the notebook's own directory resolves by
+# MAGIC default. This is a stopgap; a `pyproject.toml` + `%pip install -e .` is
+# MAGIC the more permanent fix, tracked as a follow-up rather than solved here.
+
+# COMMAND ----------
+
+import os
+import sys
+
+# notebooks/00_verify -> ../../src -> repo_root/src
+_src_path = os.path.abspath(os.path.join(os.getcwd(), "..", "..", "src"))
+if _src_path not in sys.path:
+    sys.path.append(_src_path)
+
+# COMMAND ----------
+
 from nem.logging_config import get_logger
 
 logger = get_logger(__name__)
