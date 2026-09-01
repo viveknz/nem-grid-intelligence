@@ -1,3 +1,2 @@
 # Runtime dependencies for src/nem modules.
-# Kept empty at Phase 0 — populated as ingest/transform/spatial modules
-# are written and their actual imports are known.
+openelectricity>=0.1
