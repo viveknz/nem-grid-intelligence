@@ -150,3 +150,68 @@ me from chat. Should be roughly, in order:
 `____` phase 0: pin line endings with gitattributes
 `____` phase 0: ignore local sync script
 
+## 2026-09-01 | Phase 0 | Model serving verification
+
+**Goal**
+Resolve open decision #3 — confirm whether a foundation model serving
+endpoint is actually available on this Free Edition account, and what its
+quota looks like. Also settled whether prior work (the bushfire Genie
+project) already proves other Phase 0 capabilities.
+
+**Done**
+- Confirmed with Vivek that the bushfire project already built and ran a
+  Genie space and a Databricks App on this same Free Edition account — those
+  two capabilities don't need re-verification here. Certified metrics within
+  Genie were not exercised there, so that stays open for Phase 5.
+- Researched current Free Edition model serving limits (docs, not memory):
+  limits on active endpoint count, no GPU endpoints, no provisioned
+  throughput, no custom models on GPU/batch inference — but the docs don't
+  say which pay-per-token models are actually present on this account.
+- Wrote and ran `notebooks/00_verify/02_check_model_serving.py`: lists all
+  serving endpoints via the Databricks SDK, filters to `databricks-`
+  prefixed (Foundation Model API) ones, sends a live test request to one.
+- 11 ready endpoints found: `gpt-oss-120b`, `gpt-oss-20b`,
+  `qwen3-next-80b-a3b-instruct`, `qwen35-122b-a10b`, `llama-4-maverick`,
+  `gemma-3-12b`, `meta-llama-3-1-8b-instruct`, `meta-llama-3-3-70b-instruct`,
+  plus three embedding-only endpoints (`gte-large-en`, `bge-large-en`,
+  `qwen3-embedding-0-6b`).
+- Test call to `databricks-gpt-oss-120b` returned HTTP 200, no quota issue
+  on a single request.
+
+**Broke**
+Nothing broke this session — clean run.
+
+**Decided**
+- Open decision #3 split into two parts. Part one — does a usable endpoint
+  exist at all — resolved yes, capability confirmed. Part two — which
+  specific model backs the agent — deferred to Phase 6. Rejected deciding it
+  now: a one-line "say OK" probe proves the endpoint responds, it says
+  nothing about tool-calling reliability, which is the property that
+  actually matters for an agent. Picking a model on chat-only evidence would
+  be guessing ahead of the real test.
+- Genie space and Databricks App capability checks skipped for this project,
+  on the basis that the bushfire project already proved both work on this
+  account. Certified metrics specifically were not proven there, so that
+  narrower capability stays a genuine open question for Phase 5, not
+  assumed covered by the broader "Genie works" result.
+
+**Learned**
+`gpt-oss-120b` is a reasoning model — it spends output tokens on an internal
+reasoning summary before producing a final answer. A `max_tokens: 10` test
+call returned `finish_reason: length` with only a fragment of reasoning
+text, no actual answer. Not a Free Edition restriction, just how reasoning
+models allocate tokens, but it means any real use of a reasoning-style
+endpoint needs a much larger token budget than an instruct model would, or
+the response gets cut off before it says anything useful.
+
+**Next**
+Move to the next Phase 0 capability check (SQL warehouse / Genie / Apps /
+Lakeflow — whichever Vivek picks), or start closing out Phase 0 if enough
+has been proven to move into Phase 1 design.
+
+**Commits**
+Fill in from `git log --oneline`:
+`____` phase 0: add catalog verification notebook and logger
+`____` phase 0: fix nem package path in verify notebook
+`____` phase 0: add model serving verification notebook
+
