@@ -215,3 +215,116 @@ Fill in from `git log --oneline`:
 `____` phase 0: fix nem package path in verify notebook
 `____` phase 0: add model serving verification notebook
 
+## 2026-09-01 | Phase 0 | Lakeflow Declarative Pipelines verification
+
+**Goal**
+Confirm Lakeflow Declarative Pipelines actually runs on this Free Edition
+account. Docs were ambiguous: the Free Edition limitations page implies it's
+available (lists a quota — one active pipeline per pipeline type), but
+separate Azure Databricks docs state pipelines require the Premium plan.
+
+**Done**
+- Wrote a throwaway verification pipeline (`pipelines/00_verify_pipeline/`)
+  — a materialized view over `spark.range(5)` with a data-quality expectation
+  attached, targeting `nem_intel.bronze`.
+- Found a pre-existing pipeline on the account, `dbdemos_pipeline_cdc_main_dbdemos_sdp_cdc`,
+  left over from an earlier tutorial. Confirmed with Vivek it was safe to
+  ignore rather than delete outright, since testing whether pipeline
+  creation succeeded or hit a quota error either way answered the real
+  question.
+- Created the pipeline via Workflows > Pipelines > Create pipeline > ETL
+  pipeline. Confirmed: it's offered as a normal option, no Premium-plan
+  upgrade gate shown anywhere in the flow.
+- Ran it. Result: 5 rows written, expectation "1 met", zero errors, zero
+  warnings.
+
+**Broke**
+The pipeline editor's quick-create flow scaffolds its own workspace project
+folder (`transformations/my_transformation.py`) rather than binding to the
+git-tracked source file already pushed to `pipelines/00_verify_pipeline/`.
+Worked around it for this throwaway test by pasting the code directly into
+the editor's placeholder file. Not acceptable for the real Phase 3 pipeline,
+which needs to stay git-sourced per the working agreement — needs a proper
+answer (likely: point the pipeline's source code path setting explicitly at
+the git folder, rather than accepting the auto-scaffolded project) before
+Phase 3.
+
+**Decided**
+- Lakeflow Declarative Pipelines is available and works on this account.
+  The "requires Premium plan" language in Azure Databricks docs is read as
+  referring to Azure workspace-tier licensing, a different product
+  structure from the AWS-hosted Free Edition this project runs on — not a
+  restriction that applies here. Confirmed by the live test rather than
+  taken on faith from either doc source.
+- Left both the verify pipeline and the stale demo pipeline in place for
+  now rather than cleaning up immediately. Free Edition's one-pipeline-per-
+  type quota means this needs resolving before Phase 3 creates the real
+  pipeline, but it's not blocking anything today.
+
+**Learned**
+Doc sources can disagree even when both are current and official — Azure
+Databricks and AWS-hosted Free Edition aren't the same product despite
+sharing documentation domains in places. When docs conflict on a Free
+Edition–specific question, the Free Edition limitations page is the more
+authoritative source, but a live test settles it properly either way.
+
+**Next**
+Register for the Open Electricity API key (Phase 1 blocker per doc 02).
+
+**Commits**
+`____` phase 0: add lakeflow verification pipeline source
+
+---
+
+## 2026-09-01 | Phase 1 | Open Electricity API registration
+
+**Goal**
+Resolve doc 02's open question on Open Electricity rate limits by
+registering for a key, and settle whether the Community plan's historical
+data window is enough for the project.
+
+**Done**
+- Researched current Open Electricity API docs (not from memory — this
+  product is in active beta and changes). Confirmed: Community plan gives a
+  2-year historical window (recently extended from 1 year per their
+  changelog), Academic and Enterprise give full history back to 1999.
+  Community/Academic are both non-commercial only; commercial use needs
+  Enterprise.
+- Checked for a published Academic-access application process. None exists
+  publicly — no eligibility criteria, no self-service form. Only path found
+  was contacting the team directly (GitHub discussions or Twitter) and
+  asking honestly.
+- Drafted an honest access-request description: describes the project
+  plainly as a personal, non-commercial portfolio build, not institutional
+  research, and asks whether Academic tier fits.
+- Registered for a Community account at platform.openelectricity.org.au and
+  generated an API key.
+
+**Broke**
+Nothing broke this session.
+
+**Decided**
+- Proceed on the Community plan's 2-year historical window rather than
+  chase Academic access further right now. Rejected alternative: delay
+  Phase 1 pending an Academic access reply with no published timeline.
+  The framing question (current minimum demand, not long historical trend)
+  doesn't obviously need more than 2 years, so this isn't assumed to be a
+  real constraint yet — worth revisiting only if Phase 2/3 analysis
+  specifically needs longer history.
+- The 2-year window, once confirmed as the final answer, becomes a stated
+  limitation in doc 02 and the article, the same way the CER certificate lag
+  is handled — documented rather than engineered around.
+
+**Learned**
+Community's historical window was 1 year until recently and was extended to
+2 years — Open Electricity is actively changing its access model, so limits
+here should be treated as live facts to re-check periodically, not settled
+ones to assume from this conversation later in the project.
+
+**Next**
+Build the local ingest script (`src/nem/ingest/`) that reads
+`OPENELECTRICITY_API_KEY` from the environment and lands data to
+`data/raw/`, per the land-then-upload pattern in doc 02.
+
+**Commits**
+No commits this session — registration and research only, no repo changes.
