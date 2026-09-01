@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+build/
+dist/
+
+# Env / secrets
+.env
+.env.*
+*.pem
+
+# Data landed locally before upload to UC volume
+data/raw/
+data/interim/
+
+# Databricks
+.databricks/
+.databricks-connect
+
+# Notebooks — never commit .ipynb, source-format .py only
+*.ipynb
+.ipynb_checkpoints/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Local dev helper — not part of the deliverable repo
+sync.sh
