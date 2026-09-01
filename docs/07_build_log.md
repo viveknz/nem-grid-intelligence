@@ -328,3 +328,97 @@ Build the local ingest script (`src/nem/ingest/`) that reads
 
 **Commits**
 No commits this session — registration and research only, no repo changes.
+
+
+## 2026-09-02 | Phase 1 | Open Electricity ingest script
+
+**Goal**
+Build the local ingest script for the Open Electricity API — the first
+real data pull for the project, and the first script following the
+land-then-upload pattern from doc 02.
+
+**Done**
+- Wrote `src/nem/ingest/open_electricity.py`: fetches NEM power data via
+  the official SDK, grouped by region and fuel technology, writes dated
+  CSV to `data/raw/`.
+- Wrote 12 unit tests covering date-range logic, response parsing, and
+  CSV writing — all mocked, no network calls, no real API key needed to
+  run the suite.
+- Registered the OPENELECTRICITY_API_KEY environment variable locally and
+  ran the script for real against live data.
+- Confirmed final output: all 5 NEM regions present (NSW1, QLD1, SA1,
+  TAS1, VIC1), rooftop solar showing as its own category distinct from
+  utility-scale solar, ~6,900 rows for a 7-day hourly pull.
+
+**Broke**
+Three separate bugs, found and fixed in sequence, each only surfacing once
+the previous one was cleared:
+
+1. **Timezone rejection.** The API silently returns 400 with no useful
+   error message when sent timezone-aware (UTC) timestamps — it wants naive
+   timestamps in NEM local time (fixed AEST, no daylight saving). Traced
+   the real cause via a raw curl call bypassing the SDK, since the SDK's
+   own error handling swallowed the actual message (it looks for a
+   `detail` key on error responses; this endpoint's error text is under
+   `error` instead, so the SDK fell back to a generic "Bad Request").
+   Fixed by building a `default_date_range()` helper that produces naive
+   local-time timestamps via `zoneinfo`.
+2. **Missing tzdata on Windows.** `zoneinfo` needs an IANA tzdata source,
+   which Linux/macOS ship at the OS level but Windows doesn't. Fixed by
+   adding the `tzdata` PyPI package to `requirements.txt`.
+3. **Region silently dropped from output.** The SDK's `response.to_records()`
+   convenience method only reads `result.columns`, which is documented to
+   populate only the *secondary* grouping — whatever was requested as
+   `primary_grouping` (network_region, in our case) is left as `None` in
+   that structure. The region is still returned by the API, just encoded
+   in `result.name` (format: `power_NSW1|battery`), which `to_records()`
+   never reads. Confirmed via a one-off diagnostic script that printed the
+   raw response shape. Fixed by parsing `result.name` directly instead of
+   calling `to_records()`.
+
+A fourth issue, not a bug exactly: the initial query used
+`secondary_grouping="fueltech_group"`, which merges rooftop and
+utility-scale solar into a single `solar` category — the opposite of what
+doc 00 assumed. Switched to the finer-grained `secondary_grouping="fueltech"`,
+confirmed via `UnitFueltechType` inspection that `solar_rooftop`,
+`solar_utility`, and `solar_thermal` exist as separate values at that level.
+
+**Decided**
+- Parse `result.name` directly rather than depend on `response.to_records()`
+  for anything involving primary_grouping. Rejected alternative: request
+  data without a primary grouping and do the region split ourselves
+  client-side — rejected because the server-side grouping is doing real
+  work (organizing results into per-region series) that would otherwise
+  need reimplementing.
+- Use `fueltech` (granular) instead of `fueltech_group` (simplified) as
+  the standard secondary grouping for this project, since the rooftop vs.
+  utility-scale distinction is central to the framing question. This
+  should be treated as the project's default going forward, not a
+  one-off choice for this script.
+
+**Learned**
+- Official SDKs can have real gaps even in officially documented,
+  actively maintained libraries — this one silently drops a whole
+  dimension of the data it was asked for. Worth verifying against raw API
+  responses rather than trusting a convenience method's output blindly,
+  especially when a value that was explicitly requested doesn't show up
+  in the result.
+- "Simplified" vs "granular" grouping options aren't just cosmetic —
+  fueltech_group's solar bucket would have made the entire minimum-demand
+  analysis impossible to build, since it erases the one distinction the
+  whole project depends on. Grouping choices need checking against actual
+  output, not assumed from a parameter name.
+
+**Next**
+Decide what date range and metrics the real Phase 1 backfill should pull
+(this session used a 7-day test window and power only — the real ingest
+needs a defined backfill strategy within the 2-year Community window, and
+probably needs `demand` and `energy` metrics alongside `power`).
+
+**Commits**
+Fill in from `git log --oneline`:
+`____` phase 1: add open electricity ingest script and tests
+`____` phase 1: fix naive local-time date range for open electricity api
+`____` phase 1: add tzdata dependency for windows zoneinfo support
+`____` phase 1: parse region from result.name, sdk to_records() drops it
+`____` phase 1: use granular fueltech grouping to separate rooftop and utility solar
