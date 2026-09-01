@@ -58,8 +58,15 @@ def fetch_nem_power_by_region_fueltech(
 
     Region breakdown (primary_grouping) is what makes rooftop solar's
     contribution visible per NEM region without any spatial join — see
-    doc 02 source 1. fueltech_group (secondary_grouping) separates rooftop
-    solar from other generation types.
+    doc 02 source 1. fueltech (secondary_grouping) separates rooftop solar
+    from other generation types.
+
+    Uses "fueltech" rather than the coarser "fueltech_group" — the latter
+    merges solar_rooftop and solar_utility into a single "solar" bucket,
+    which loses exactly the distinction this project needs. Confirmed via
+    a live query that returned only "solar" under fueltech_group, then via
+    UnitFueltechType inspection that solar_rooftop/solar_utility/solar_thermal
+    exist separately at the "fueltech" level. See build log 2026-09-02.
 
     `client` is injected rather than constructed here so tests can pass a
     fake client instead of hitting the real API.
@@ -83,7 +90,7 @@ def fetch_nem_power_by_region_fueltech(
         date_start=date_start,
         date_end=date_end,
         primary_grouping="network_region",
-        secondary_grouping="fueltech_group",
+        secondary_grouping="fueltech",
     )
 
     records: list[dict] = []
@@ -95,12 +102,12 @@ def fetch_nem_power_by_region_fueltech(
                     "unexpected result.name format, skipping this result: %r", result.name
                 )
                 continue
-            region, fueltech_group = result.name[len(name_prefix):].split("|", 1)
+            region, fueltech = result.name[len(name_prefix):].split("|", 1)
             for point in result.data:
                 records.append({
                     "interval": point.timestamp.isoformat(),
                     "network_region": region,
-                    "fueltech_group": fueltech_group,
+                    "fueltech": fueltech,
                     series.metric: point.value,
                 })
 

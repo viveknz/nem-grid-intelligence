@@ -58,7 +58,7 @@ def test_default_date_range_truncates_to_the_hour():
 
 
 def test_fetch_calls_client_with_correct_grouping():
-    """Region + fueltech_group grouping is what makes rooftop solar's
+    """Region + fueltech grouping is what makes rooftop solar's
     regional contribution visible — this is the one thing that must not
     silently change."""
     mock_client = MagicMock()
@@ -77,7 +77,7 @@ def test_fetch_calls_client_with_correct_grouping():
     call_kwargs = mock_client.get_network_data.call_args.kwargs
     assert call_kwargs["network_code"] == "NEM"
     assert call_kwargs["primary_grouping"] == "network_region"
-    assert call_kwargs["secondary_grouping"] == "fueltech_group"
+    assert call_kwargs["secondary_grouping"] == "fueltech"
     assert call_kwargs["date_start"] == start
     assert call_kwargs["date_end"] == end
     assert len(result) == 1
@@ -106,10 +106,10 @@ def test_fetch_parses_region_and_fueltech_from_result_name():
 
     assert len(result) == 2
     assert result[0]["network_region"] == "NSW1"
-    assert result[0]["fueltech_group"] == "solar_rooftop"
+    assert result[0]["fueltech"] == "solar_rooftop"
     assert result[0]["power"] == 850.2
     assert result[1]["network_region"] == "VIC1"
-    assert result[1]["fueltech_group"] == "coal"
+    assert result[1]["fueltech"] == "coal"
 
 
 def test_fetch_skips_malformed_result_names_without_crashing():
