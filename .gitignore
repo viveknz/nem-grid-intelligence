@@ -34,6 +34,3 @@ htmlcov/
 .DS_Store
 .vscode/
 .idea/
-
-# Local dev helper — not part of the deliverable repo
-sync.sh
