@@ -64,8 +64,15 @@ def fetch_nem_power_by_region_fueltech(
     `client` is injected rather than constructed here so tests can pass a
     fake client instead of hitting the real API.
 
-    Returns a flat list of record dicts via the SDK's to_records() —
-    each dict has interval timestamp, region, fueltech_group, and value.
+    NOTE: this does NOT use the SDK's response.to_records() — that method
+    only reads result.columns, which the installed SDK version (0.11.3)
+    leaves as None for whichever dimension was used as primary_grouping.
+    The region is still present, just encoded in result.name instead
+    (format: "{metric}_{region}|{secondary_value}", e.g. "power_NSW1|battery")
+    — confirmed via a live diagnostic call. Parsing that string is a
+    workaround for an SDK gap, not a documented API contract, so this
+    needs re-checking if the SDK version changes. See build log
+    2026-09-02.
     """
     from openelectricity.types import DataMetric
 
@@ -78,7 +85,25 @@ def fetch_nem_power_by_region_fueltech(
         primary_grouping="network_region",
         secondary_grouping="fueltech_group",
     )
-    records = list(response.to_records())
+
+    records: list[dict] = []
+    for series in response.data:
+        name_prefix = f"{series.metric}_"
+        for result in series.results:
+            if not result.name.startswith(name_prefix) or "|" not in result.name:
+                logger.warning(
+                    "unexpected result.name format, skipping this result: %r", result.name
+                )
+                continue
+            region, fueltech_group = result.name[len(name_prefix):].split("|", 1)
+            for point in result.data:
+                records.append({
+                    "interval": point.timestamp.isoformat(),
+                    "network_region": region,
+                    "fueltech_group": fueltech_group,
+                    series.metric: point.value,
+                })
+
     logger.info("fetched %d records from Open Electricity API", len(records))
     return records
 

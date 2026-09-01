@@ -6,6 +6,7 @@ Electricity's API itself.
 """
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 
@@ -17,6 +18,21 @@ from nem.ingest.open_electricity import (
     fetch_nem_power_by_region_fueltech,
     write_records_to_csv,
 )
+
+
+def _make_point(timestamp: datetime, value: float) -> SimpleNamespace:
+    """Stand-in for TimeSeriesDataPoint — exposes .timestamp/.value."""
+    return SimpleNamespace(timestamp=timestamp, value=value)
+
+
+def _make_result(name: str, points: list) -> SimpleNamespace:
+    """Stand-in for TimeSeriesResult — exposes .name/.data."""
+    return SimpleNamespace(name=name, data=points)
+
+
+def _make_series(metric: str, results: list) -> SimpleNamespace:
+    """Stand-in for NetworkTimeSeries — exposes .metric/.results."""
+    return SimpleNamespace(metric=metric, results=results)
 
 
 def test_default_date_range_returns_naive_datetimes():
@@ -46,11 +62,10 @@ def test_fetch_calls_client_with_correct_grouping():
     regional contribution visible — this is the one thing that must not
     silently change."""
     mock_client = MagicMock()
-    mock_response = MagicMock()
-    mock_response.to_records.return_value = [
-        {"interval": "2026-01-01T00:00:00Z", "network_region": "NSW1",
-         "fueltech_group": "solar_rooftop", "power": 120.5},
-    ]
+    ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    mock_response = SimpleNamespace(data=[
+        _make_series("power", [_make_result("power_NSW1|battery", [_make_point(ts, 120.5)])]),
+    ])
     mock_client.get_network_data.return_value = mock_response
 
     start = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -68,10 +83,61 @@ def test_fetch_calls_client_with_correct_grouping():
     assert len(result) == 1
 
 
+def test_fetch_parses_region_and_fueltech_from_result_name():
+    """The SDK's to_records() drops the primary_grouping dimension — this
+    is the actual fix, parsing it back out of result.name. Confirmed via
+    a live diagnostic call that result.name looks like 'power_NSW1|battery'.
+    If this ever breaks, it means the SDK's naming format changed."""
+    mock_client = MagicMock()
+    ts = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    mock_response = SimpleNamespace(data=[
+        _make_series("power", [
+            _make_result("power_NSW1|solar_rooftop", [_make_point(ts, 850.2)]),
+            _make_result("power_VIC1|coal", [_make_point(ts, 3200.0)]),
+        ]),
+    ])
+    mock_client.get_network_data.return_value = mock_response
+
+    result = fetch_nem_power_by_region_fueltech(
+        mock_client,
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+        datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+
+    assert len(result) == 2
+    assert result[0]["network_region"] == "NSW1"
+    assert result[0]["fueltech_group"] == "solar_rooftop"
+    assert result[0]["power"] == 850.2
+    assert result[1]["network_region"] == "VIC1"
+    assert result[1]["fueltech_group"] == "coal"
+
+
+def test_fetch_skips_malformed_result_names_without_crashing():
+    """If the SDK's naming format ever changes, we should log and skip
+    rather than crash the whole ingest run on one unexpected result."""
+    mock_client = MagicMock()
+    ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    mock_response = SimpleNamespace(data=[
+        _make_series("power", [
+            _make_result("something_unexpected", [_make_point(ts, 1.0)]),
+            _make_result("power_QLD1|gas", [_make_point(ts, 500.0)]),
+        ]),
+    ])
+    mock_client.get_network_data.return_value = mock_response
+
+    result = fetch_nem_power_by_region_fueltech(
+        mock_client,
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+        datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+
+    assert len(result) == 1
+    assert result[0]["network_region"] == "QLD1"
+
+
 def test_fetch_returns_empty_list_when_no_data():
     mock_client = MagicMock()
-    mock_response = MagicMock()
-    mock_response.to_records.return_value = []
+    mock_response = SimpleNamespace(data=[])
     mock_client.get_network_data.return_value = mock_response
 
     result = fetch_nem_power_by_region_fueltech(
