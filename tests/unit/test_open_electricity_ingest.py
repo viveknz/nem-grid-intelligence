@@ -7,14 +7,38 @@ Electricity's API itself.
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from nem.ingest.open_electricity import (
     dated_filename,
+    default_date_range,
     fetch_nem_power_by_region_fueltech,
     write_records_to_csv,
 )
+
+
+def test_default_date_range_returns_naive_datetimes():
+    """The API rejects timezone-aware timestamps with an unhelpful 400 —
+    confirmed live. This must never regress silently."""
+    now = datetime(2026, 3, 15, 10, 30, tzinfo=ZoneInfo("Australia/Brisbane"))
+    date_start, date_end = default_date_range(days=7, now=now)
+    assert date_start.tzinfo is None
+    assert date_end.tzinfo is None
+
+
+def test_default_date_range_spans_requested_days():
+    now = datetime(2026, 3, 15, 10, 30, tzinfo=ZoneInfo("Australia/Brisbane"))
+    date_start, date_end = default_date_range(days=7, now=now)
+    assert (date_end - date_start).days == 7
+
+
+def test_default_date_range_truncates_to_the_hour():
+    now = datetime(2026, 3, 15, 10, 47, 23, tzinfo=ZoneInfo("Australia/Brisbane"))
+    _, date_end = default_date_range(days=7, now=now)
+    assert date_end.minute == 0
+    assert date_end.second == 0
 
 
 def test_fetch_calls_client_with_correct_grouping():

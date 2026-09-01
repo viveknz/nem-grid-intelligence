@@ -14,15 +14,38 @@ Usage:
 
 import csv
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from nem.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 RAW_DATA_DIR = Path("data/raw")
+
+# NEM market time is fixed AEST (UTC+10) year-round, no daylight saving,
+# regardless of which state a request originates from. The API expects
+# date_start/date_end as NAIVE timestamps in this local time — a
+# timezone-aware UTC datetime causes a 400 with no useful error message,
+# because the installed SDK version only surfaces the "detail" key on
+# error responses, while this endpoint's actual message is under "error".
+# Confirmed via a direct curl call bypassing the SDK. See build log
+# 2026-09-01/02.
+NEM_TZ = ZoneInfo("Australia/Brisbane")
+
+
+def default_date_range(days: int = 7, now: datetime | None = None) -> tuple[datetime, datetime]:
+    """Compute a naive NEM-local-time (date_start, date_end) pair.
+
+    `now` is injectable so this is testable without depending on the
+    actual current time.
+    """
+    now = now or datetime.now(NEM_TZ)
+    date_end = now.replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    date_start = date_end - timedelta(days=days)
+    return date_start, date_end
 
 
 def fetch_nem_power_by_region_fueltech(
@@ -84,7 +107,7 @@ def write_records_to_csv(records: list[dict], output_path: Path) -> None:
 
 def dated_filename(prefix: str, run_time: datetime | None = None) -> str:
     """Build a dated filename so repeated runs don't overwrite each other."""
-    run_time = run_time or datetime.now(timezone.utc)
+    run_time = run_time or datetime.now(NEM_TZ)
     return f"{prefix}_{run_time.strftime('%Y%m%d_%H%M%S')}.csv"
 
 
@@ -95,10 +118,9 @@ def main() -> None:
 
     from openelectricity import OEClient
 
-    date_end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-    date_start = date_end - timedelta(days=7)
+    date_start, date_end = default_date_range(days=7)
 
-    logger.info("fetching NEM power data: %s to %s", date_start, date_end)
+    logger.info("fetching NEM power data (network-local time): %s to %s", date_start, date_end)
 
     with OEClient() as client:
         records = fetch_nem_power_by_region_fueltech(client, date_start, date_end)
