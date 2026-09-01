@@ -1,2 +1,6 @@
 # Runtime dependencies for src/nem modules.
 openelectricity>=0.1
+
+# zoneinfo (stdlib) needs this on Windows, which doesn't ship IANA tzdata
+# at the OS level the way Linux/macOS do. Harmless no-op elsewhere.
+tzdata>=2024.1
