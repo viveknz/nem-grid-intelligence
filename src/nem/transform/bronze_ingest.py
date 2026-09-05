@@ -9,7 +9,7 @@ bronze/silver/gold split.
 """
 
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import input_file_name
+from pyspark.sql.functions import col
 from pyspark.sql.types import DoubleType, StringType, StructField, StructType
 
 # interval stays StringType here deliberately — it's ISO8601 with a UTC
@@ -37,13 +37,15 @@ def load_csvs(spark: SparkSession, path_glob: str, schema: StructType) -> DataFr
     and unreliable across hundreds of files landed at different times,
     and an explicit schema fails loudly if a file's shape ever drifts
     rather than silently guessing wrong. Adds _source_file for lineage,
-    so a bad row can always be traced back to which backfill chunk
-    produced it.
+    via the _metadata.file_path hidden column rather than the legacy
+    input_file_name() function — Unity Catalog governed reads reject
+    input_file_name() outright (UC_COMMAND_NOT_SUPPORTED), confirmed
+    live. _metadata.file_path is the current, UC-safe equivalent.
     """
     return (
         spark.read
         .option("header", True)
         .schema(schema)
         .csv(path_glob)
-        .withColumn("_source_file", input_file_name())
+        .withColumn("_source_file", col("_metadata.file_path"))
     )
