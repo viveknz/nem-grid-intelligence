@@ -1,3 +1,10 @@
 -r requirements.txt
 pytest>=8.0
 pytest-mock>=3.14
+
+# For local unit tests of transform/bronze functions against small
+# in-memory DataFrames (docs/04_engineering_standards.md section 6).
+# Not pinned to match the actual Databricks Runtime version exactly —
+# that's a known gap; local tests validate transformation logic, not
+# runtime-exact behavior. Revisit if a version-specific bug surfaces.
+pyspark>=3.5
