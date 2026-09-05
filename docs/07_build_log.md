@@ -74,6 +74,11 @@ hidden. Started with the ones already known.
   certificate approval trails installation by up to twelve months. Any trend on the most
   recent year will show a false decline. Must be stated in Genie instructions.
 - **Open Electricity licence.** CC BY-NC 4.0. Attribution required, non-commercial only.
+- **Open Electricity Pro tier cost.** Currently free, granted after a direct request,
+  but Open Electricity has indicated it's expected to become a paid tier with further
+  contact to follow. Conflicts with the project's stated "no paid APIs" constraint if
+  it happens. Fallback is the Community plan's 2-year window, which still covers the
+  project's core framing question. Watch for contact from Open Electricity about this.
 
 ---
 
@@ -422,3 +427,44 @@ Fill in from `git log --oneline`:
 `____` phase 1: add tzdata dependency for windows zoneinfo support
 `____` phase 1: parse region from result.name, sdk to_records() drops it
 `____` phase 1: use granular fueltech grouping to separate rooftop and utility solar
+
+
+## 2026-09-05 | Phase 1 | Open Electricity Pro tier confirmed
+
+**Goal**
+Verify what the newly granted Pro tier access actually unlocks, following an email
+from Open Electricity confirming an upgrade.
+
+**Done**
+- Received confirmation that the account was moved to a Pro tier, in response to the
+  honest access request sent earlier (portfolio project, not institutional research).
+- Ran a one-off diagnostic query for January 2021 data — 5 years back, well outside
+  the Community plan's 2-year window — using the already-tested ingest functions.
+  Returned 264 records successfully, confirming full historical access is live.
+
+**Broke**
+Nothing broke this session — the diagnostic script itself failed twice before running
+cleanly, but both failures were local environment issues, not project bugs: the venv
+wasn't active in a fresh terminal (script ran against system Python, which doesn't
+have `tzdata` installed), and the API key wasn't re-exported in the new terminal
+session (`export` doesn't persist across terminal restarts).
+
+**Decided**
+Documented the future paid-tier risk in doc 02 and doc 07's known limits rather than
+deciding a fallback plan now. The Community plan's 2-year window remains a workable
+fallback if Pro access is ever withdrawn or requires payment, so this isn't urgent —
+worth deciding for real only if/when Open Electricity actually gets in touch about
+ongoing usage.
+
+**Learned**
+`export` in Git Bash only lasts for the current terminal session. Anything needed
+across sessions (the API key, in this case) either needs re-exporting each time or
+adding to `~/.bashrc` — with the tradeoff that a key in `~/.bashrc` sits in plaintext
+on disk permanently rather than only in memory for one session.
+
+**Next**
+Decide the backfill date range and metrics (`demand`, `energy` alongside `power`) for
+the real Phase 1 historical pull, now that the historical window question is settled.
+
+**Commits**
+No commits this session — verification and documentation only.
