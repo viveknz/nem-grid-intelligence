@@ -11,6 +11,13 @@
 # MAGIC table (docs/04_engineering_standards.md section 5) that every future
 # MAGIC pipeline notebook writes a row to.
 # MAGIC
+# MAGIC **BACKFILL-ONLY — do not schedule this notebook as-is.** It writes
+# MAGIC with `mode("overwrite")`, replacing the whole table on every run.
+# MAGIC That's correct for a one-time historical load, but would silently
+# MAGIC destroy history if run on a schedule against only new incremental
+# MAGIC data. Ongoing/incremental ingestion needs a separate notebook with
+# MAGIC append + dedup logic — not built yet. See build log 2026-09-05.
+# MAGIC
 # MAGIC **Reads:** `/Volumes/nem_intel/bronze/raw_landing/backfill/*.csv`
 # MAGIC **Writes:** `nem_intel.bronze.region_power_fueltech_hourly`,
 # MAGIC `nem_intel.bronze.region_demand_hourly`, one row to
