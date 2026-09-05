@@ -468,3 +468,91 @@ the real Phase 1 historical pull, now that the historical window question is set
 
 **Commits**
 No commits this session — verification and documentation only.
+
+## 2026-09-05 | Phase 1 | Bronze load — backfill complete
+
+**Goal**
+Upload the completed backfill CSVs to the Unity Catalog volume and write the
+first bronze notebook to load them into Delta tables, completing Phase 1.
+
+**Done**
+- Installed and authenticated the Databricks CLI (`databricks auth login`,
+  OAuth browser flow) — two stale profiles needed re-authenticating before
+  the CLI would work.
+- Uploaded all 270 backfill CSVs to `nem_intel.bronze.raw_landing/backfill`
+  via `databricks fs cp -r`. File count confirmed matching on both sides.
+- Built `src/nem/transform/bronze_ingest.py` (`load_csvs`, explicit schemas
+  for power and demand) and `src/nem/pipeline_utils.py`
+  (`build_run_log_row`) — first modules needing real PySpark rather than
+  pure Python, so also added a local Spark test fixture
+  (`tests/conftest.py`) and `pyspark` to `requirements-dev.txt`.
+- Built `notebooks/01_bronze/01_load_power_demand.py`: reads both CSV sets
+  from the volume, writes `nem_intel.bronze.region_power_fueltech_hourly`
+  and `nem_intel.bronze.region_demand_hourly`, creates and writes to
+  `nem_intel.gold.run_log` (first pipeline notebook, so this table didn't
+  exist yet), adds table comments.
+- Final verified load: 4,546,247 power rows, 513,360 demand rows. Power
+  count is an exact match against local file line counts minus header
+  rows (4,546,382 total lines − 135 header rows across chunk files) — zero
+  data loss between local CSVs and the Delta table.
+
+**Broke**
+- Local pytest with the new Spark fixture hung, then crashed, on Windows —
+  traced to a `ConnectionRefusedError` after Ctrl+C, meaning the JVM
+  process died outright during the glob-multiple-files test. Root cause:
+  Windows doesn't ship `winutils.exe`, which some Hadoop/Spark local
+  filesystem operations (glob matching among them) need, and without it
+  some operations crash the JVM rather than just warning. Decided not to
+  chase a fix this session — local pyspark testing isn't required for the
+  actual pipeline to run, since Databricks' real Spark is unaffected.
+  Logged as a follow-up, not fixed.
+- First real run of the bronze notebook failed:
+  `UC_COMMAND_NOT_SUPPORTED` — Unity Catalog governed reads reject the
+  legacy `input_file_name()` function outright, wanting `_metadata.file_path`
+  instead. Fixed in `bronze_ingest.py`, verified correct via local Spark
+  tests (still passing on Linux, confirming this was a genuine fix and not
+  Windows-specific).
+- Second run failed with the *identical* error, despite the fix being
+  confirmed present in the pulled file. Cause: Databricks caches imported
+  Python modules within a running session — re-running cells after a git
+  pull doesn't reload changed `.py` files under `src/` unless the Python
+  process is explicitly restarted. Fixed with `%restart_python`, then a
+  full top-to-bottom re-run.
+
+**Decided**
+- This notebook is backfill-only — writes with `mode("overwrite")`, correct
+  for a one-time full historical load, wrong if scheduled against
+  incremental data (would silently destroy history each run). Explicitly
+  documented as such in the notebook header. Ongoing/incremental ingestion
+  will be a separate notebook with append + dedup logic, built later —
+  rejected building both now, since the incremental design isn't needed
+  until scheduling actually becomes the next concern.
+- Local pyspark/Windows testing fix deferred rather than solved — the
+  actual goal (bronze data loaded and verified in Databricks) doesn't
+  depend on it, and this session was already long.
+
+**Learned**
+- Unity Catalog disallows some legacy Spark functions outright rather than
+  just deprecating them — `input_file_name()` is a hard error under UC,
+  not a warning. `_metadata.file_path` is the current equivalent.
+- Databricks notebook sessions cache imported modules like any long-running
+  Python process. A git pull updates files on disk; it does not reload
+  already-imported modules in an active session. `%restart_python` (or
+  detach/reattach) is required to pick up source changes mid-session —
+  worth remembering for every future notebook debugging cycle, not just
+  this one.
+- Windows-specific PySpark issues (winutils.exe, JVM crashes on certain
+  local filesystem operations) are a real, recurring category of friction
+  for local testing that doesn't show up in Databricks itself. Worth
+  planning around (e.g., WSL) rather than re-discovering each time.
+
+**Next**
+Phase 1 is complete. Move to Phase 2 (silver: cleaning, typing, geometry
+validation) or resolve remaining open decisions (ABS boundary edition,
+weather source) first — Vivek's call next session.
+
+**Commits**
+Fill in from `git log --oneline`:
+`____` phase 1: add bronze loading notebook, run_log convention, spark test fixture
+`____` phase 1: use _metadata.file_path for uc-safe lineage tracking
+`____` phase 1: mark bronze notebook as backfill-only, not schedulable
