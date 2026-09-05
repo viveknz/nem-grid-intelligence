@@ -115,6 +115,65 @@ def fetch_nem_power_by_region_fueltech(
     return records
 
 
+def fetch_nem_demand_by_region(
+    client: Any,
+    date_start: datetime,
+    date_end: datetime,
+    interval: str = "1h",
+) -> list[dict]:
+    """Fetch NEM demand and demand_gross by region.
+
+    demand: operational demand (grid draw) — excludes rooftop solar, since
+    it isn't centrally dispatched/measured the way scheduled generation is.
+    demand_gross: demand + rooftop solar generation. This is OpenElectricity's
+    own formal definition (opennem/opennem GitHub issue #398):
+        demand_gross = demand_and_nonsched + rooftop_generation
+    The gap between demand and demand_gross is rooftop solar's suppression
+    effect on grid demand, directly — this is the core signal for the
+    project's minimum-demand question.
+
+    Uses get_market, not get_network_data — demand lives on a separate
+    endpoint (MarketMetric, not DataMetric). get_market has no
+    secondary_grouping parameter, so result.name is "{metric}_{region}"
+    (no pipe separator), unlike the power fetch. Confirmed via a live
+    diagnostic call. See build log 2026-09-05.
+
+    Returns one record per (interval, region), with demand and demand_gross
+    as separate columns on the same row — wide format, ready to join
+    against fetch_nem_power_by_region_fueltech's output later.
+    """
+    from openelectricity.types import MarketMetric
+
+    response = client.get_market(
+        network_code="NEM",
+        metrics=[MarketMetric.DEMAND, MarketMetric.DEMAND_GROSS],
+        interval=interval,
+        date_start=date_start,
+        date_end=date_end,
+        primary_grouping="network_region",
+    )
+
+    by_key: dict[tuple, dict] = {}
+    for series in response.data:
+        name_prefix = f"{series.metric}_"
+        for result in series.results:
+            if not result.name.startswith(name_prefix):
+                logger.warning(
+                    "unexpected result.name format, skipping this result: %r", result.name
+                )
+                continue
+            region = result.name[len(name_prefix):]
+            for point in result.data:
+                ts = point.timestamp.isoformat()
+                key = (ts, region)
+                record = by_key.setdefault(key, {"interval": ts, "network_region": region})
+                record[series.metric] = point.value
+
+    records = list(by_key.values())
+    logger.info("fetched %d demand records from Open Electricity API", len(records))
+    return records
+
+
 def write_records_to_csv(records: list[dict], output_path: Path) -> None:
     """Write a list of record dicts to CSV, creating parent dirs as needed.
 
@@ -152,13 +211,17 @@ def main() -> None:
 
     date_start, date_end = default_date_range(days=7)
 
-    logger.info("fetching NEM power data (network-local time): %s to %s", date_start, date_end)
+    logger.info("fetching NEM data (network-local time): %s to %s", date_start, date_end)
 
     with OEClient() as client:
-        records = fetch_nem_power_by_region_fueltech(client, date_start, date_end)
+        power_records = fetch_nem_power_by_region_fueltech(client, date_start, date_end)
+        demand_records = fetch_nem_demand_by_region(client, date_start, date_end)
 
-    output_path = RAW_DATA_DIR / dated_filename("nem_power_region_fueltech")
-    write_records_to_csv(records, output_path)
+    power_path = RAW_DATA_DIR / dated_filename("nem_power_region_fueltech")
+    write_records_to_csv(power_records, power_path)
+
+    demand_path = RAW_DATA_DIR / dated_filename("nem_demand_region")
+    write_records_to_csv(demand_records, demand_path)
 
 
 if __name__ == "__main__":

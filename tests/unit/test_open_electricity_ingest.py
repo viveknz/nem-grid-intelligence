@@ -148,6 +148,78 @@ def test_fetch_returns_empty_list_when_no_data():
     assert result == []
 
 
+def test_fetch_demand_calls_market_with_correct_metrics():
+    mock_client = MagicMock()
+    mock_response = SimpleNamespace(data=[])
+    mock_client.get_market.return_value = mock_response
+
+    from openelectricity.types import MarketMetric
+
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+    from nem.ingest.open_electricity import fetch_nem_demand_by_region
+    fetch_nem_demand_by_region(mock_client, start, end)
+
+    mock_client.get_market.assert_called_once()
+    call_kwargs = mock_client.get_market.call_args.kwargs
+    assert call_kwargs["network_code"] == "NEM"
+    assert call_kwargs["primary_grouping"] == "network_region"
+    assert MarketMetric.DEMAND in call_kwargs["metrics"]
+    assert MarketMetric.DEMAND_GROSS in call_kwargs["metrics"]
+
+
+def test_fetch_demand_merges_demand_and_demand_gross_onto_same_row():
+    """demand and demand_gross come back as separate series but should
+    land on the same (interval, region) row — that's what makes the
+    suppression gap (demand_gross - demand) computable downstream."""
+    from nem.ingest.open_electricity import fetch_nem_demand_by_region
+
+    mock_client = MagicMock()
+    ts = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    mock_response = SimpleNamespace(data=[
+        _make_series("demand", [_make_result("demand_NSW1", [_make_point(ts, 7900.0)])]),
+        _make_series("demand_gross", [_make_result("demand_gross_NSW1", [_make_point(ts, 8300.0)])]),
+    ])
+    mock_client.get_market.return_value = mock_response
+
+    result = fetch_nem_demand_by_region(
+        mock_client,
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+        datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+
+    assert len(result) == 1
+    assert result[0]["network_region"] == "NSW1"
+    assert result[0]["demand"] == 7900.0
+    assert result[0]["demand_gross"] == 8300.0
+
+
+def test_fetch_demand_handles_multiple_regions():
+    from nem.ingest.open_electricity import fetch_nem_demand_by_region
+
+    mock_client = MagicMock()
+    ts = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    mock_response = SimpleNamespace(data=[
+        _make_series("demand", [
+            _make_result("demand_NSW1", [_make_point(ts, 7900.0)]),
+            _make_result("demand_VIC1", [_make_point(ts, 5200.0)]),
+        ]),
+    ])
+    mock_client.get_market.return_value = mock_response
+
+    result = fetch_nem_demand_by_region(
+        mock_client,
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+        datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+
+    assert len(result) == 2
+    regions = {r["network_region"] for r in result}
+    assert regions == {"NSW1", "VIC1"}
+
+
+
 def test_write_records_to_csv_writes_header_and_rows(tmp_path):
     records = [
         {"region": "NSW1", "fueltech_group": "solar_rooftop", "power": 100.0},
