@@ -13,7 +13,7 @@ their own source documents when they start.
 
 | # | Source | Grain | Licence | Verified |
 |---|--------|-------|---------|:--------:|
-| 1 | Open Electricity API | NEM region, 5 or 30 min | CC BY-NC 4.0 | Yes |
+| 1 | Open Electricity API | NEM region, 5 or 30 min | CC BY-NC 4.0, Pro tier (may become paid) | Yes |
 | 2 | CER small-scale installation postcode data | Postcode, monthly | Australian Government open data | Yes |
 | 3 | ABS ASGS Postal Areas boundaries | Postcode polygon | CC BY 4.0 | No |
 | 4 | Weather observations | Station point, hourly | TBC | No |
@@ -39,6 +39,21 @@ to see it.
 Python SDK reads the `OPENELECTRICITY_API_KEY` environment variable, so no credentials
 go in code.
 
+**Access tier.** Registered on the free Community plan initially, which limits queries
+to a 2-year historical window. Requested Pro tier access directly, describing the
+project honestly as a personal, non-commercial portfolio build rather than
+institutional research. Granted 2026-09-05. Confirmed live: a query for January 2021
+data succeeded, well outside the Community 2-year limit — full historical range is
+available, at least back to 2021, not yet tested against the network's full history to
+1999.
+
+Open Electricity indicated Pro is expected to become a paid tier at some point, with
+further contact to work out ongoing usage. This is a live risk against the project's
+"no paid APIs" constraint (doc 00, section 4) — not a problem today, but something to
+watch rather than a settled fact. If it becomes paid, the fallback is reverting to the
+Community plan's 2-year window, which is enough for the minimum-demand framing question
+even if not for long historical trend analysis.
+
 **Licence.** CC BY-NC 4.0, non-commercial, unless stated otherwise. Attribution is
 required. Two consequences: attribution goes in the README, the article, and the app
 footer. And this project can never be presented as commercial work or sold. For a
@@ -55,9 +70,9 @@ so the API cannot be called from Databricks directly. The pattern is:
 That local script lives in `src/nem/ingest/` and is tested like everything else. It also
 becomes the thing you point at in an interview when asked how you handle credentials.
 
-**Open question.** Rate limits on a free API key are not documented in what I found.
-Needs checking after registration, since it determines how much history you can backfill
-and how often the scheduled job can run.
+**Open question.** Request-rate limits (as opposed to the historical-window limit,
+resolved above) are still not documented anywhere found. Not yet hit in practice at
+low request volumes — needs checking once the real Phase 1 backfill runs at volume.
 
 ---
 
